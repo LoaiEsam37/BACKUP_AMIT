@@ -14,13 +14,15 @@
 #include "TMR0_interface.h"
 #include "TMR0_config.h"
 
-static void (*PRV_pToFuncCallBack)(void) = NULL;
+static void (*PRV_pToFuncCallBack_OVF)(void) = NULL;
+static void (*PRV_pToFuncCallBack_CTC)(void) = NULL;
 
 /**
- * @brief Initialize Timer0 in Normal (Overflow) mode
+ * @brief Initialize Timer0 based on selected mode (Normal or CTC)
  */
 void TMR0_voidInit(void)
 {
+#if TMR0_MODE == TMR0_NORMAL_MODE
     /* Select Normal Mode: WGM01 = 0, WGM00 = 0 */
     CLR_BIT(TCCR0, WGM00);
     CLR_BIT(TCCR0, WGM01);
@@ -30,6 +32,19 @@ void TMR0_voidInit(void)
 
     /* Enable Overflow Interrupt */
     SET_BIT(TIMSK, TOIE0);
+
+#elif TMR0_MODE == TMR0_CTC_MODE
+    /* Select CTC Mode: WGM01 = 1, WGM00 = 0 */
+    CLR_BIT(TCCR0, WGM00);
+    SET_BIT(TCCR0, WGM01);
+
+    /* Load Compare Value */
+    OCR0 = TMR0_COMPARE_MATCH_VALUE;
+
+    /* Enable Output Compare Match Interrupt */
+    SET_BIT(TIMSK, OCIE0);
+
+#endif
 }
 
 /**
@@ -56,41 +71,65 @@ void TMR0_voidStop(void)
 
 /**
  * @brief Set callback for Timer0 overflow interrupt
- *
- * @param pToFuncCallBack Pointer to callback function
  */
 void TMR0_voidSetCallbackOVF(void (*pToFuncCallBack)(void))
 {
     if (pToFuncCallBack != NULL)
     {
-        PRV_pToFuncCallBack = pToFuncCallBack;
-    }
-    else
-    {
-        // Optional: handle null pointer (could add error flag)
+        PRV_pToFuncCallBack_OVF = pToFuncCallBack;
     }
 }
 
 /**
- * @brief ISR for Timer0 Overflow (vector 11 in datasheet)
+ * @brief Set callback for Timer0 compare match interrupt
+ */
+void TMR0_voidSetCallbackCTC(void (*pToFuncCallBack)(void))
+{
+    if (pToFuncCallBack != NULL)
+    {
+        PRV_pToFuncCallBack_CTC = pToFuncCallBack;
+    }
+}
+
+/**
+ * @brief ISR for Timer0 Overflow
  */
 ISR(TIMER0_OVF_vect)
 {
+#if TMR0_MODE == TMR0_NORMAL_MODE
     static u16 local_u16Counter = 0;
     local_u16Counter++;
 
     if (local_u16Counter >= TMR0_OVERFLOW_COUNTER)
     {
-        /* Reload the timer with preload value */
         TCNT0 = TMR0_PRELOAD_VALUE;
 
-        /* Call user callback if set */
-        if (PRV_pToFuncCallBack != NULL)
+        if (PRV_pToFuncCallBack_OVF != NULL)
         {
-            PRV_pToFuncCallBack();
+            PRV_pToFuncCallBack_OVF();
         }
 
-        /* Reset overflow counter */
         local_u16Counter = 0;
     }
+#endif
+}
+
+/**
+ * @brief ISR for Timer0 Compare Match (CTC)
+ */
+ISR(TIMER0_COMP_vect)
+{
+#if TMR0_MODE == TMR0_CTC_MODE
+    static u16 local_u16Counter = 0;
+    local_u16Counter++;
+
+    if (local_u16Counter >= TMR0_CTC_COUNTER)
+    {
+		if (PRV_pToFuncCallBack_CTC != NULL)
+		{
+			PRV_pToFuncCallBack_CTC();
+		}
+	    local_u16Counter = 0;
+    }
+#endif
 }
