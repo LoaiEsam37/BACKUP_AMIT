@@ -91,6 +91,37 @@ void TMR0_voidSetCallbackCTC(void (*pToFuncCallBack)(void))
     }
 }
 
+
+void TMR0_voidSetDelay_msUsingCTC(u16 copy_u16Delay_ms)
+{
+	/* 1. Configure Timer0 in CTC mode */
+	CLR_BIT(TCCR0, WGM00);
+	SET_BIT(TCCR0, WGM01);   // WGM01 = 1 ? CTC mode
+
+	/* 2. Set compare match value */
+	OCR0 = 250;   // gives 1ms tick at F_CPU=16MHz, prescaler=64
+
+	/* 3. Start timer with prescaler 64 */
+	SET_BIT(TCCR0, CS00);
+	SET_BIT(TCCR0, CS01);
+	CLR_BIT(TCCR0, CS02);
+
+	/* 4. Wait for delay_ms matches */
+	for (u16 i = 0; i < copy_u16Delay_ms; i++)
+	{
+		/* Wait until OCF0 flag is set (compare match occurred) */
+		while (GET_BIT(TIFR, OCF0) == 0);
+
+		/* Clear flag manually by writing 1 */
+		SET_BIT(TIFR, OCF0);
+	}
+
+	/* 5. Stop timer */
+	CLR_BIT(TCCR0, CS00);
+	CLR_BIT(TCCR0, CS01);
+	CLR_BIT(TCCR0, CS02);
+}
+
 /**
  * @brief ISR for Timer0 Overflow
  */
